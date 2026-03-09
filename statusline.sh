@@ -102,13 +102,11 @@ settings="$HOME/.claude/settings.json"
 ctx_remaining=$(( 100 - ctx_pct ))
 ctx_color=$(color_pct "$ctx_pct")
 line1="${BLUE}${model}${RESET}${SEP}"
-line1+="✍️ ${ctx_color}${ctx_remaining}% left${RESET}${SEP}"
+line1+="✍️ ${ctx_color}${ctx_remaining}%${RESET}${SEP}"
 line1+="${CYAN}${dir_name}${RESET}"
 [ -n "$git_branch" ] && line1+=" ${GREEN}(${git_branch}${RED}${git_dirty}${GREEN})${RESET}"
-[ -n "$duration" ]   && line1+="${SEP}${DIM}⏱ ${RESET}${WHITE}${duration}${RESET}"
+[ -n "$duration" ]   && line1+="${SEP}${WHITE}${duration}${RESET}"
 line1+="${SEP}${GREEN}+${lines_added}${RESET}${DIM}/${RESET}${RED}-${lines_removed}${RESET}"
-line1+="${SEP}"
-$thinking_on && line1+="${MAGENTA}◐ thinking${RESET}" || line1+="${DIM}◑ thinking${RESET}"
 
 # Get OAuth token from macOS Keychain or credentials file
 get_token() {
@@ -126,7 +124,7 @@ CACHE="/tmp/claude-statusline-cache.json"
 usage=""
 if [ -f "$CACHE" ]; then
   age=$(( $(date +%s) - $(stat -f %m "$CACHE") ))
-  (( age < 60 )) && usage=$(cat "$CACHE")
+  (( age < 65 )) && usage=$(cat "$CACHE")
 fi
 if [ -z "$usage" ]; then
   token=$(get_token)
@@ -134,6 +132,7 @@ if [ -z "$usage" ]; then
     resp=$(curl -s --max-time 5 \
       -H "Authorization: Bearer $token" \
       -H "anthropic-beta: oauth-2025-04-20" \
+      -H "User-Agent: claude-code/2.1.34" \
       "https://api.anthropic.com/api/oauth/usage" 2>/dev/null)
     if echo "$resp" | jq -e '.five_hour' >/dev/null 2>&1; then
       usage="$resp"; echo "$resp" > "$CACHE"
