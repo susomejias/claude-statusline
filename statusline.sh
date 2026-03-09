@@ -40,7 +40,7 @@ progress_bar() {
 
 iso_to_epoch() {
   local iso="${1%%.*}"; iso="${iso%%Z}"
-  date -j -f "%Y-%m-%dT%H:%M:%S" "$iso" +%s 2>/dev/null
+  TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%S" "$iso" +%s 2>/dev/null
 }
 
 format_time() {
@@ -52,7 +52,7 @@ format_time() {
 format_datetime() {
   local epoch; epoch=$(iso_to_epoch "$1")
   [ -z "$epoch" ] && return
-  date -j -r "$epoch" +"%b %-d, %H:%M" 2>/dev/null
+  date -j -r "$epoch" +"%a %-d %b, %H:%M" 2>/dev/null
 }
 
 # Extract native Claude Code data
