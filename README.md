@@ -17,17 +17,58 @@ Colors shift green → orange → yellow → red as limits are approached.
 ## Requirements
 
 - macOS (uses `date -j` and `security` keychain)
-- [`jq`](https://jqlang.github.io/jq/) — `brew install jq`
+- `bash` and `curl`
+- [`jq`](https://jqlang.github.io/jq/) (optional if already installed globally)
 - Claude Code with an active session (OAuth token stored in Keychain)
 
 ## Installation
 
 ```bash
-curl -o ~/.claude/statusline.sh https://raw.githubusercontent.com/susomejias/claude-statusline/main/statusline.sh
-chmod +x ~/.claude/statusline.sh
+curl -fsSL https://raw.githubusercontent.com/susomejias/claude-statusline/main/install.sh | bash
 ```
 
-Then add to `~/.claude/settings.json`:
+The installer will:
+
+- Install `statusline.sh` at `~/.claude/statusline.sh`
+- Create/update `~/.claude/settings.json` safely
+- Create a timestamped backup before changing existing settings
+- If `jq` is missing, download official `jq` binary to `~/.claude/bin/jq` and verify checksum
+- Ask for confirmation before any potentially incompatible overwrite
+
+### Update / Uninstall
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/susomejias/claude-statusline/main/install.sh | bash -s -- update
+curl -fsSL https://raw.githubusercontent.com/susomejias/claude-statusline/main/install.sh | bash -s -- uninstall
+```
+
+### Safety behavior
+
+- If `statusLine` already points to another command, the installer asks before replacing it.
+- If `~/.claude/statusline.sh` differs from the incoming script, the installer asks before overwriting it.
+- In non-interactive mode, risky changes require `--yes`.
+- `uninstall` only removes `statusLine` when it points to `~/.claude/statusline.sh`.
+
+### Dependency behavior
+
+- If `jq` is already available in `PATH`, it is reused.
+- If `jq` is not available, installer places it at `~/.claude/bin/jq`.
+- `statusline.sh` automatically falls back to `~/.claude/bin/jq` when global `jq` is not in `PATH`.
+
+### Testing
+
+Run the Bash test suite:
+
+```bash
+chmod +x ./tests/test.sh
+./tests/test.sh
+```
+
+The suite covers installer idempotency/safety and `jq` fallback behavior.
+
+### Managed Claude setting
+
+The installer manages this block in `~/.claude/settings.json`:
 
 ```json
 {
@@ -39,11 +80,11 @@ Then add to `~/.claude/settings.json`:
 }
 ```
 
-The statusline will appear automatically on the next Claude Code interaction.
+Other settings are preserved.
 
 ## How it works
 
-Claude Code pipes a JSON payload to the script on each interaction. The script extracts native fields (model, context window, session start, lines changed) and also fetches rate limit data from the Anthropic API using the OAuth token already stored in your macOS Keychain — no extra credentials needed. Results are cached for 60 seconds to avoid unnecessary requests.
+Claude Code pipes a JSON payload to the script on each interaction. The script extracts native fields (model, context window, session start, lines changed) and also fetches rate limit data from the Anthropic API using the OAuth token already stored in your macOS Keychain — no extra credentials needed. Results are cached for 90 seconds (1 minute 30 seconds) to avoid unnecessary requests.
 
 ## Credits
 

@@ -3,6 +3,10 @@
 input=$(cat)
 [ -z "$input" ] && printf "Claude" && exit 0
 
+JQ_BIN="$(command -v jq 2>/dev/null || true)"
+[ -z "$JQ_BIN" ] && [ -x "$HOME/.claude/bin/jq" ] && JQ_BIN="$HOME/.claude/bin/jq"
+[ -z "$JQ_BIN" ] && printf "Claude" && exit 0
+
 # Colors
 RESET='\033[0m'
 DIM='\033[2m'
@@ -56,22 +60,23 @@ format_datetime() {
 }
 
 # Extract native Claude Code data
-model=$(echo "$input" | jq -r '.model.display_name // "Claude"')
-cwd=$(echo "$input" | jq -r '.cwd // ""')
-size=$(echo "$input" | jq -r '.context_window.context_window_size // 200000')
-input_tokens=$(echo "$input" | jq -r '.context_window.current_usage.input_tokens // 0')
-cache_create=$(echo "$input" | jq -r '.context_window.current_usage.cache_creation_input_tokens // 0')
-cache_read=$(echo "$input" | jq -r '.context_window.current_usage.cache_read_input_tokens // 0')
-session_start=$(echo "$input" | jq -r '.session.start_time // empty')
-lines_added=$(echo "$input" | jq -r '.cost.total_lines_added // 0' 2>/dev/null)
-lines_removed=$(echo "$input" | jq -r '.cost.total_lines_removed // 0' 2>/dev/null)
+model=$(echo "$input" | "$JQ_BIN" -r '.model.display_name // "Claude"')
+cwd=$(echo "$input" | "$JQ_BIN" -r '.cwd // ""')
+size=$(echo "$input" | "$JQ_BIN" -r '.context_window.context_window_size // 200000')
+input_tokens=$(echo "$input" | "$JQ_BIN" -r '.context_window.current_usage.input_tokens // 0')
+cache_create=$(echo "$input" | "$JQ_BIN" -r '.context_window.current_usage.cache_creation_input_tokens // 0')
+cache_read=$(echo "$input" | "$JQ_BIN" -r '.context_window.current_usage.cache_read_input_tokens // 0')
+session_start=$(echo "$input" | "$JQ_BIN" -r '.session.start_time // empty')
+lines_added=$(echo "$input" | "$JQ_BIN" -r '.cost.total_lines_added // 0' 2>/dev/null)
+lines_removed=$(echo "$input" | "$JQ_BIN" -r '.cost.total_lines_removed // 0' 2>/dev/null)
 
 current_tokens=$(( input_tokens + cache_create + cache_read ))
 (( size == 0 )) && size=200000
 ctx_pct=$(( current_tokens * 100 / size ))
 
 # Directory and git
-dir_name=$(basename "$cwd")
+dir_name="${cwd##*/}"
+[ -z "$dir_name" ] && dir_name="$cwd"
 git_branch=""
 git_dirty=""
 if git -C "$cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -96,7 +101,7 @@ fi
 # Thinking mode
 thinking_on=false
 settings="$HOME/.claude/settings.json"
-[ -f "$settings" ] && [ "$(jq -r '.alwaysThinkingEnabled // false' "$settings" 2>/dev/null)" = "true" ] && thinking_on=true
+[ -f "$settings" ] && [ "$("$JQ_BIN" -r '.alwaysThinkingEnabled // false' "$settings" 2>/dev/null)" = "true" ] && thinking_on=true
 
 # Line 1: Model | Context | Dir (branch) | Duration | Thinking
 ctx_remaining=$(( 100 - ctx_pct ))
@@ -112,19 +117,20 @@ line1+="${SEP}${GREEN}+${lines_added}${RESET}${DIM}/${RESET}${RED}-${lines_remov
 get_token() {
   local blob; blob=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
   if [ -n "$blob" ]; then
-    local t; t=$(echo "$blob" | jq -r '.claudeAiOauth.accessToken // empty' 2>/dev/null)
+    local t; t=$(echo "$blob" | "$JQ_BIN" -r '.claudeAiOauth.accessToken // empty' 2>/dev/null)
     [ -n "$t" ] && echo "$t" && return
   fi
   local creds="$HOME/.claude/.credentials.json"
-  [ -f "$creds" ] && jq -r '.claudeAiOauth.accessToken // empty' "$creds" 2>/dev/null
+  [ -f "$creds" ] && "$JQ_BIN" -r '.claudeAiOauth.accessToken // empty' "$creds" 2>/dev/null
 }
 
-# Fetch usage with 60s cache
+# Fetch usage with 90s cache (1m30s)
 CACHE="/tmp/claude-statusline-cache.json"
+CACHE_TTL_SECONDS=90
 usage=""
 if [ -f "$CACHE" ]; then
   age=$(( $(date +%s) - $(stat -f %m "$CACHE") ))
-  (( age < 65 )) && usage=$(cat "$CACHE")
+  (( age <= CACHE_TTL_SECONDS )) && usage=$(cat "$CACHE")
 fi
 if [ -z "$usage" ]; then
   token=$(get_token)
@@ -134,7 +140,7 @@ if [ -z "$usage" ]; then
       -H "anthropic-beta: oauth-2025-04-20" \
       -H "User-Agent: claude-code/2.1.34" \
       "https://api.anthropic.com/api/oauth/usage" 2>/dev/null)
-    if echo "$resp" | jq -e '.five_hour' >/dev/null 2>&1; then
+    if echo "$resp" | "$JQ_BIN" -e '.five_hour' >/dev/null 2>&1; then
       usage="$resp"; echo "$resp" > "$CACHE"
     fi
   fi
@@ -144,12 +150,12 @@ fi
 # Lines 2-3: Rate limit bars (current window + weekly)
 rate_lines=""
 if [ -n "$usage" ]; then
-  fh_pct=$(echo "$usage" | jq -r '.five_hour.utilization // 0' | awk '{printf "%.0f", $1}')
-  fh_reset=$(format_time "$(echo "$usage" | jq -r '.five_hour.resets_at // empty')")
+  fh_pct=$(echo "$usage" | "$JQ_BIN" -r '.five_hour.utilization // 0' | awk '{printf "%.0f", $1}')
+  fh_reset=$(format_time "$(echo "$usage" | "$JQ_BIN" -r '.five_hour.resets_at // empty')")
   fh_color=$(color_pct "$fh_pct")
 
-  wd_pct=$(echo "$usage" | jq -r '.seven_day.utilization // 0' | awk '{printf "%.0f", $1}')
-  wd_reset=$(format_datetime "$(echo "$usage" | jq -r '.seven_day.resets_at // empty')")
+  wd_pct=$(echo "$usage" | "$JQ_BIN" -r '.seven_day.utilization // 0' | awk '{printf "%.0f", $1}')
+  wd_reset=$(format_datetime "$(echo "$usage" | "$JQ_BIN" -r '.seven_day.resets_at // empty')")
   wd_color=$(color_pct "$wd_pct")
 
   fh_remaining=$(( 100 - fh_pct ))
