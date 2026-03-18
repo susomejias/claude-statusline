@@ -237,6 +237,21 @@ EOF
   assert_equals "2" "$(PATH="${sandbox}/bin:/bin:/usr/sbin:/sbin" "${home}/.claude/bin/jq" -n '1+1')"
 }
 
+test_install_via_stdin_works() {
+  local home log
+  home="$(new_home)"
+  log="${TEST_TMP_ROOT}/install-stdin.log"
+
+  cat "$INSTALL_SCRIPT" | \
+    HOME="$home" \
+    CLAUDE_STATUSLINE_SCRIPT_URL="file://${STATUSLINE_SCRIPT}" \
+    bash -s -- install >"$log" 2>&1
+
+  assert_executable "${home}/.claude/statusline.sh"
+  assert_file_exists "${home}/.claude/settings.json"
+  assert_equals "~/.claude/statusline.sh" "$("$(jq_for_home "$home")" -r '.statusLine.command' "${home}/.claude/settings.json")"
+}
+
 test_statusline_uses_local_jq_fallback() {
   local home sandbox payload output
   [ -n "$REAL_JQ" ] || return 99
@@ -290,6 +305,7 @@ main() {
   run_test test_install_with_yes_replaces_conflict_and_backups
   run_test test_uninstall_keeps_custom_statusline_setting
   run_test test_installs_local_jq_without_homebrew
+  run_test test_install_via_stdin_works
   run_test test_statusline_uses_local_jq_fallback
 
   printf "\nResult: %d passed, %d failed, %d skipped\n" "$TESTS_PASSED" "$TESTS_FAILED" "$TESTS_SKIPPED"

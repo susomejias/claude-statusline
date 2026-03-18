@@ -13,14 +13,18 @@ JQ_VERSION="${CLAUDE_STATUSLINE_JQ_VERSION:-1.8.1}"
 JQ_RELEASE_BASE="${CLAUDE_STATUSLINE_JQ_RELEASE_BASE:-https://github.com/jqlang/jq/releases/download/jq-${JQ_VERSION}}"
 JQ_CHECKSUMS_URL="${CLAUDE_STATUSLINE_JQ_CHECKSUMS_URL:-https://raw.githubusercontent.com/jqlang/jq/master/sig/v${JQ_VERSION}/sha256sum.txt}"
 LOCAL_JQ_BIN="${CLAUDE_BIN_DIR}/jq"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOCAL_STATUSLINE="${SCRIPT_DIR}/statusline.sh"
+SCRIPT_DIR=""
+LOCAL_STATUSLINE=""
+if [[ -n "${BASH_SOURCE[0]-}" && "${BASH_SOURCE[0]-}" != "-" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  LOCAL_STATUSLINE="${SCRIPT_DIR}/statusline.sh"
+fi
 
 ASSUME_YES=false
 COMMAND="install"
 JQ_BIN=""
 
-info() { printf "[INFO] %s\n" "$1"; }
+info() { printf "[INFO] %s\n" "$1" >&2; }
 warn() { printf "[WARN] %s\n" "$1" >&2; }
 error() { printf "[ERROR] %s\n" "$1" >&2; }
 
