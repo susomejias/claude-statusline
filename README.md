@@ -2,14 +2,10 @@
 
 A minimal statusline for [Claude Code](https://claude.ai/code) showing context window, rate limits, git info, and session stats.
 
-```
-Claude Sonnet 4.6 │ ✍️ 88% left │ my-project (main) │ ⏱ 42m │ +45/-3 │ ◑ thinking
+<img width="598" height="72" alt="Captura de pantalla 2026-03-18 a las 23 49 52" src="https://github.com/user-attachments/assets/9de068b9-9fc9-45f0-8905-8c5c6fa9deba" />
 
-Current ●●●●●●●○○○  72% left ⟳ 14:30
-Weekly  ●●●●●●●●●○  91% left ⟳ Mar 13, 09:00
-```
+**Line 1** — Model · Context remaining · Directory (git branch) · Session duration · Lines changed
 
-**Line 1** — Model · Context remaining · Directory (git branch) · Session duration · Lines changed · Thinking mode
 **Lines 2–3** — Rate limit remaining for the current 5h window and the 7-day rolling window, with reset times in 24h local time
 
 Colors shift green → orange → yellow → red as limits are approached.
