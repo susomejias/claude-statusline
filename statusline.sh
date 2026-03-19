@@ -69,6 +69,8 @@ cache_read=$(echo "$input" | "$JQ_BIN" -r '.context_window.current_usage.cache_r
 session_start=$(echo "$input" | "$JQ_BIN" -r '.session.start_time // empty')
 lines_added=$(echo "$input" | "$JQ_BIN" -r '.cost.total_lines_added // 0' 2>/dev/null)
 lines_removed=$(echo "$input" | "$JQ_BIN" -r '.cost.total_lines_removed // 0' 2>/dev/null)
+total_cost=$(echo "$input" | "$JQ_BIN" -r '.cost.total_cost_usd // empty' 2>/dev/null)
+output_tokens=$(echo "$input" | "$JQ_BIN" -r '.context_window.total_output_tokens // 0' 2>/dev/null)
 
 current_tokens=$(( input_tokens + cache_create + cache_read ))
 (( size == 0 )) && size=200000
@@ -147,7 +149,7 @@ if [ -z "$usage" ]; then
   [ -z "$usage" ] && [ -f "$CACHE" ] && usage=$(cat "$CACHE")
 fi
 
-# Lines 2-3: Rate limit bars (current window + weekly)
+# Lines 2-3: Rate limit bars (subscription) or cost + token info (API billing)
 rate_lines=""
 if [ -n "$usage" ]; then
   fh_pct=$(echo "$usage" | "$JQ_BIN" -r '.five_hour.utilization // 0' | awk '{printf "%.0f", $1}')
@@ -163,6 +165,12 @@ if [ -n "$usage" ]; then
 
   rate_lines="${WHITE}Current${RESET} $(progress_bar "$fh_pct") ${fh_color}$(printf "%3d" "$fh_remaining")% left${RESET} ${DIM}⟳ ${RESET}${WHITE}${fh_reset}${RESET}"
   rate_lines+="\n${WHITE}Weekly${RESET}  $(progress_bar "$wd_pct") ${wd_color}$(printf "%3d" "$wd_remaining")% left${RESET} ${DIM}⟳ ${RESET}${WHITE}${wd_reset}${RESET}"
+elif [ -n "$total_cost" ]; then
+  cost_fmt=$(printf "%.4f" "$total_cost")
+  in_k=$(awk "BEGIN{printf \"%.1f\", $current_tokens/1000}")
+  out_k=$(awk "BEGIN{printf \"%.1f\", $output_tokens/1000}")
+  rate_lines="${WHITE}Cost${RESET}    ${GREEN}\$${cost_fmt}${RESET}"
+  rate_lines+="\n${WHITE}Tokens${RESET}  ${DIM}in${RESET} ${WHITE}${in_k}k${RESET}${SEP}${DIM}cache write${RESET} ${WHITE}${cache_create}${RESET}${SEP}${DIM}cache read${RESET} ${WHITE}${cache_read}${RESET}${SEP}${DIM}out${RESET} ${WHITE}${out_k}k${RESET}"
 fi
 
 printf "%b" "$line1"
