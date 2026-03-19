@@ -4,6 +4,8 @@ A minimal statusline for [Claude Code](https://claude.ai/code) showing context w
 
 <img width="598" height="72" alt="Captura de pantalla 2026-03-18 a las 23 49 52" src="https://github.com/user-attachments/assets/9de068b9-9fc9-45f0-8905-8c5c6fa9deba" />
 
+<img width="596" height="69" alt="claude-statusline-api-cost" src="https://github.com/user-attachments/assets/4d473b27-2928-4680-80da-95290010aad1" />
+
 **Line 1** — Model · Context remaining · Directory (git branch) · Session duration · Lines changed
 
 **Lines 2–3** — Rate limit remaining for the current 5h window and the 7-day rolling window, with reset times in 24h local time
