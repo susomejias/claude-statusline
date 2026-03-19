@@ -1,6 +1,6 @@
 # claude-statusline
 
-A minimal statusline for [Claude Code](https://claude.ai/code) showing context window, rate limits, git info, and session stats.
+A minimal statusline for [Claude Code](https://claude.ai/code) showing context window, rate limits or cost, git info, and session stats.
 
 <img width="598" height="72" alt="Captura de pantalla 2026-03-18 a las 23 49 52" src="https://github.com/user-attachments/assets/9de068b9-9fc9-45f0-8905-8c5c6fa9deba" />
 
