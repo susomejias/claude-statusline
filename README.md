@@ -1,6 +1,9 @@
 # claude-statusline
 
-A minimal statusline for [Claude Code](https://claude.ai/code) showing context window, rate limits or cost, git info, and session stats.
+A minimal statusline for [Claude Code](https://claude.ai/code) showing context, git info, and session stats.
+
+- Subscription users see current and weekly rate limits.
+- API billing / API key users see session cost and token breakdown.
 
 <img width="598" height="72" alt="Captura de pantalla 2026-03-18 a las 23 49 52" src="https://github.com/user-attachments/assets/9de068b9-9fc9-45f0-8905-8c5c6fa9deba" />
 
@@ -8,7 +11,10 @@ A minimal statusline for [Claude Code](https://claude.ai/code) showing context w
 
 **Line 1** — Model · Context remaining · Directory (git branch) · Session duration · Lines changed
 
-**Lines 2–3** — Rate limit remaining for the current 5h window and the 7-day rolling window, with reset times in 24h local time
+**Lines 2–3**
+
+- Subscription: current 5h window and 7-day rolling window, with reset times in local time.
+- API billing / API key: session cost in USD plus input, cache write, cache read, and output tokens.
 
 Colors shift green → orange → yellow → red as limits are approached.
 
@@ -17,7 +23,9 @@ Colors shift green → orange → yellow → red as limits are approached.
 - macOS (uses `date -j` and `security` keychain)
 - `bash` and `curl`
 - [`jq`](https://jqlang.github.io/jq/) (optional if already installed globally)
-- Claude Code with an active session (OAuth token stored in Keychain)
+- Claude Code with an active session
+
+Rate limits require the Claude OAuth token in macOS Keychain. API billing output works from the native Claude Code session payload.
 
 ## Installation
 
@@ -62,7 +70,7 @@ chmod +x ./tests/test.sh
 ./tests/test.sh
 ```
 
-The suite covers installer idempotency/safety and `jq` fallback behavior.
+The suite covers installer safety, `jq` fallback behavior, and the API billing cost display.
 
 ### Managed Claude setting
 
@@ -82,7 +90,9 @@ Other settings are preserved.
 
 ## How it works
 
-Claude Code pipes a JSON payload to the script on each interaction. The script extracts native fields (model, context window, session start, lines changed) and also fetches rate limit data from the Anthropic API using the OAuth token already stored in your macOS Keychain — no extra credentials needed. Results are cached for 90 seconds (1 minute 30 seconds) to avoid unnecessary requests.
+Claude Code pipes a JSON payload to the script on each interaction. The script always reads native fields such as model, context window, session timing, line changes, cost, and tokens.
+
+If the Claude OAuth token is available in macOS Keychain, it also fetches subscription usage from the Anthropic API and shows current and weekly limits. If that usage data is not available, it falls back to the native cost and token data already present in the Claude Code payload. Results from the usage endpoint are cached for 90 seconds.
 
 ## Credits
 
