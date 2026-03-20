@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALL_SCRIPT="${ROOT_DIR}/install.sh"
 STATUSLINE_SCRIPT="${ROOT_DIR}/statusline.sh"
 REAL_JQ="$(command -v jq || true)"
+STATUSLINE_CACHE_FILE="/tmp/claude-statusline-cache.json"
 
 TESTS_PASSED=0
 TESTS_FAILED=0
@@ -79,6 +80,51 @@ jq_for_home() {
 
 new_home() {
   mktemp -d "${TEST_TMP_ROOT}/home.XXXXXX"
+}
+
+run_statusline_isolated() {
+  local backup=""
+
+  if [ -f "$STATUSLINE_CACHE_FILE" ]; then
+    backup="$(mktemp "${TEST_TMP_ROOT}/statusline-cache.XXXXXX")"
+    mv "$STATUSLINE_CACHE_FILE" "$backup"
+  fi
+
+  set +e
+  "$@"
+  local rc=$?
+  set -e
+
+  rm -f "$STATUSLINE_CACHE_FILE"
+  if [ -n "$backup" ] && [ -f "$backup" ]; then
+    mv "$backup" "$STATUSLINE_CACHE_FILE"
+  fi
+
+  return "$rc"
+}
+
+create_statusline_command_stubs() {
+  local dir="$1"
+
+  mkdir -p "${dir}/bin"
+
+  cat > "${dir}/bin/git" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  cat > "${dir}/bin/security" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  cat > "${dir}/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  cat > "${dir}/bin/awk" <<'EOF'
+#!/usr/bin/env bash
+exec /usr/bin/awk "$@"
+EOF
+  chmod +x "${dir}/bin/git" "${dir}/bin/security" "${dir}/bin/curl" "${dir}/bin/awk"
 }
 
 test_script_syntax() {
@@ -257,7 +303,7 @@ test_statusline_uses_local_jq_fallback() {
   [ -n "$REAL_JQ" ] || return 99
   home="$(new_home)"
   sandbox="$(mktemp -d "${TEST_TMP_ROOT}/statusline-sandbox.XXXXXX")"
-  mkdir -p "${home}/.claude/bin" "${sandbox}/bin"
+  mkdir -p "${home}/.claude/bin"
 
   cat > "${home}/.claude/bin/jq" <<EOF
 #!/usr/bin/env bash
@@ -265,23 +311,37 @@ exec "${REAL_JQ}" "\$@"
 EOF
   chmod +x "${home}/.claude/bin/jq"
 
-  cat > "${sandbox}/bin/git" <<'EOF'
-#!/usr/bin/env bash
-exit 1
-EOF
-  cat > "${sandbox}/bin/security" <<'EOF'
-#!/usr/bin/env bash
-exit 1
-EOF
-  cat > "${sandbox}/bin/curl" <<'EOF'
-#!/usr/bin/env bash
-exit 1
-EOF
-  chmod +x "${sandbox}/bin/git" "${sandbox}/bin/security" "${sandbox}/bin/curl"
+  create_statusline_command_stubs "$sandbox"
 
   payload='{"model":{"display_name":"Test Model"},"cwd":"/tmp","context_window":{"context_window_size":200000,"current_usage":{"input_tokens":1000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"session":{"start_time":"2026-03-18T10:00:00Z"},"cost":{"total_lines_added":1,"total_lines_removed":1}}'
-  output="$(printf '%s' "$payload" | PATH="${sandbox}/bin:/bin:/usr/sbin:/sbin" HOME="$home" "$STATUSLINE_SCRIPT")"
+  output="$(printf '%s' "$payload" | run_statusline_isolated env PATH="${sandbox}/bin:/bin:/usr/sbin:/sbin" HOME="$home" "$STATUSLINE_SCRIPT")"
   assert_contains "$output" "Test Model"
+}
+
+test_statusline_shows_cost_for_api_billing_users() {
+  local home sandbox payload output
+  [ -n "$REAL_JQ" ] || return 99
+  home="$(new_home)"
+  sandbox="$(mktemp -d "${TEST_TMP_ROOT}/statusline-api-billing.XXXXXX")"
+  mkdir -p "${home}/.claude/bin"
+
+  cat > "${home}/.claude/bin/jq" <<EOF
+#!/usr/bin/env bash
+exec "${REAL_JQ}" "\$@"
+EOF
+  chmod +x "${home}/.claude/bin/jq"
+
+  create_statusline_command_stubs "$sandbox"
+
+  payload='{"model":{"display_name":"Test Model"},"cwd":"/tmp","context_window":{"context_window_size":200000,"current_usage":{"input_tokens":1000,"cache_creation_input_tokens":250,"cache_read_input_tokens":250},"total_output_tokens":2500},"session":{"start_time":"2026-03-18T10:00:00Z"},"cost":{"total_lines_added":1,"total_lines_removed":1,"total_cost_usd":1.2345}}'
+  output="$(printf '%s' "$payload" | run_statusline_isolated env PATH="${sandbox}/bin:/bin:/usr/sbin:/sbin" HOME="$home" "$STATUSLINE_SCRIPT")"
+
+  assert_contains "$output" "Cost"
+  assert_contains "$output" '$1.2345'
+  assert_contains "$output" "Tokens"
+  assert_contains "$output" "cache write"
+  assert_contains "$output" "cache read"
+  assert_contains "$output" "2.5k"
 }
 
 run_test() {
@@ -307,6 +367,7 @@ main() {
   run_test test_installs_local_jq_without_homebrew
   run_test test_install_via_stdin_works
   run_test test_statusline_uses_local_jq_fallback
+  run_test test_statusline_shows_cost_for_api_billing_users
 
   printf "\nResult: %d passed, %d failed, %d skipped\n" "$TESTS_PASSED" "$TESTS_FAILED" "$TESTS_SKIPPED"
   [ "$TESTS_FAILED" -eq 0 ]
