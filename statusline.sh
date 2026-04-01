@@ -84,7 +84,7 @@ git_dirty=""
 if git -C "$cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   git_branch=$(git -C "$cwd" symbolic-ref --short HEAD 2>/dev/null)
   [ ${#git_branch} -gt 25 ] && git_branch="${git_branch:0:25}…"
-  [ -n "$(git -C "$cwd" status --porcelain 2>/dev/null)" ] && git_dirty="*"
+  [ -n "$(git -C "$cwd" status --porcelain --no-optional-locks 2>/dev/null)" ] && git_dirty="*"
 fi
 
 # Session duration
