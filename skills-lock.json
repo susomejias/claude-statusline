@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "git-commit": {
+      "source": "susomejias/skills",
+      "sourceType": "github",
+      "skillPath": "git-commit/SKILL.md",
+      "computedHash": "0b0943e7ffec39e1e5977161d1ace6b641c0a7174748c039b8227b191c392dc8"
+    }
+  }
+}

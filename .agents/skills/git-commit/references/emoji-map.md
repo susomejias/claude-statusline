@@ -1,0 +1,54 @@
+# Emoji Commit Map
+
+Use these emoji/type conventions when drafting commit messages:
+
+- `✨ feat` - New feature
+- `🐛 fix` - Bug fix
+- `📝 docs` - Documentation
+- `💄 style` - Formatting or style-only changes
+- `♻️ refactor` - Code restructuring without behavior change
+- `⚡ perf` - Performance improvement
+- `✅ test` - Add or update tests
+- `🔧 chore` - Tooling, maintenance, or build support
+- `🚀 ci` - CI pipeline changes
+- `🚨 warnings` - Warning fixes
+- `🔒️ security` - Security hardening or fixes
+- `🚚 move` - Move or rename resources
+- `🏗️ architecture` - Architectural changes
+- `➕ add-dep` - Add dependencies
+- `➖ remove-dep` - Remove dependencies
+- `🌱 seed` - Seed data changes
+- `🧑‍💻 dx` - Developer experience
+- `🏷️ types` - Type definitions or typing improvements
+- `👔 business` - Business logic
+- `🚸 ux` - UX improvement
+- `🩹 minor-fix` - Small patch-level fix
+- `🥅 errors` - Error handling improvements
+- `🔥 remove` - Remove code/files
+- `🎨 structure` - Structure or architecture polish
+- `🚑️ hotfix` - Urgent production fix
+- `🎉 init` - Initial commit or scaffold
+- `🔖 release` - Version/release commit
+- `🚧 wip` - Work in progress
+- `💚 ci-fix` - CI fix
+- `📌 pin-deps` - Pin dependency versions
+- `👷 ci-build` - Build system/worker updates
+- `📈 analytics` - Analytics/instrumentation
+- `✏️ typos` - Typo fixes
+- `⏪️ revert` - Revert commit(s)
+- `📄 license` - License updates
+- `💥 breaking` - Breaking changes
+- `🍱 assets` - Assets
+- `♿️ accessibility` - Accessibility improvements
+- `💡 comments` - Comments/documentation-in-code
+- `🗃️ db` - Database-related changes
+- `🔊 logs` - Add logs
+- `🔇 remove-logs` - Remove logs
+- `🙈 gitignore` - `.gitignore` updates
+- `📸 snapshots` - Snapshot updates
+- `⚗️ experiment` - Experimental work
+- `🚩 flags` - Feature flags
+- `💫 animations` - Animation updates
+- `⚰️ dead-code` - Remove dead code
+- `🦺 validation` - Validation improvements
+- `✈️ offline` - Offline support
