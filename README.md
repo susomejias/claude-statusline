@@ -20,12 +20,12 @@ Colors shift green → orange → yellow → red as limits are approached.
 
 ## Requirements
 
-- macOS (uses `date -j` and `security` keychain)
+- macOS or Linux (coreutils flavor is detected automatically: BSD `date`/`stat` on macOS, GNU on Linux)
 - `bash` and `curl`
 - [`jq`](https://jqlang.github.io/jq/) (optional if already installed globally)
 - Claude Code with an active session
 
-Rate limits require the Claude OAuth token in macOS Keychain. API billing output works from the native Claude Code session payload.
+Rate limits require the Claude OAuth token. It is read from the macOS Keychain when available, otherwise from `~/.claude/.credentials.json` (the location Claude Code uses on Linux). API billing output works from the native Claude Code session payload.
 
 ## Installation
 
@@ -92,7 +92,7 @@ Other settings are preserved.
 
 Claude Code pipes a JSON payload to the script on each interaction. The script always reads native fields such as model, context window, session timing, line changes, cost, and tokens.
 
-If the Claude OAuth token is available in macOS Keychain, it also fetches subscription usage from the Anthropic API and shows current and weekly limits. If that usage data is not available, it falls back to the native cost and token data already present in the Claude Code payload. Results from the usage endpoint are cached for 90 seconds.
+If the Claude OAuth token is available — from the macOS Keychain, or from `~/.claude/.credentials.json` on Linux — it also fetches subscription usage from the Anthropic API and shows current and weekly limits. If that usage data is not available, it falls back to the native cost and token data already present in the Claude Code payload. Results from the usage endpoint are cached for 90 seconds.
 
 ## Credits
 

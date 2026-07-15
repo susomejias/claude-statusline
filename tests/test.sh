@@ -224,37 +224,44 @@ JSON
   [ ! -f "${home}/.claude/statusline.sh" ]
 }
 
+# Builds a PATH sandbox whose `uname -s` reports the given OS, so the installer's
+# OS/asset detection can be exercised for both macOS and Linux from any host.
 create_no_jq_path_wrappers() {
   local dir="$1"
+  local os_name="${2:-Darwin}"
   local cmd
 
   mkdir -p "${dir}/bin"
 
-  cat > "${dir}/bin/uname" <<'EOF'
+  cat > "${dir}/bin/uname" <<EOF
 #!/usr/bin/env bash
-if [[ "${1:-}" == "-s" ]]; then
-  echo Darwin
+if [[ "\${1:-}" == "-s" ]]; then
+  echo ${os_name}
   exit 0
 fi
-if [[ "${1:-}" == "-m" ]]; then
+if [[ "\${1:-}" == "-m" ]]; then
   echo x86_64
   exit 0
 fi
-exec /usr/bin/uname "$@"
+exec /usr/bin/uname "\$@"
 EOF
   chmod +x "${dir}/bin/uname"
 
-  for cmd in curl shasum mktemp dirname awk cmp; do
+  for cmd in curl shasum sha256sum mktemp dirname awk cmp; do
+    command -v "$cmd" >/dev/null 2>&1 || continue
     cat > "${dir}/bin/${cmd}" <<EOF
 #!/usr/bin/env bash
-exec /usr/bin/${cmd} "\$@"
+exec "$(command -v "$cmd")" "\$@"
 EOF
     chmod +x "${dir}/bin/${cmd}"
   done
 }
 
-test_installs_local_jq_without_homebrew() {
-  local home sandbox release checksums asset hash
+# Shared body for the "install downloads a verified jq binary" test, parameterized
+# by the simulated OS and its expected release asset name.
+assert_installs_local_jq_for_os() {
+  local os_name="$1" asset="$2"
+  local home sandbox release checksums hash
   [ -n "$REAL_JQ" ] || return 99
   home="$(new_home)"
   sandbox="$(mktemp -d "${TEST_TMP_ROOT}/sandbox.XXXXXX")"
@@ -262,7 +269,6 @@ test_installs_local_jq_without_homebrew() {
   checksums="${sandbox}/sha256sum.txt"
   mkdir -p "$release"
 
-  asset="jq-macos-amd64"
   cat > "${release}/${asset}" <<EOF
 #!/usr/bin/env bash
 exec "${REAL_JQ}" "\$@"
@@ -271,7 +277,7 @@ EOF
   hash="$(shasum -a 256 "${release}/${asset}" | awk '{print $1}')"
   printf "%s %s\n" "$hash" "$asset" > "$checksums"
 
-  create_no_jq_path_wrappers "$sandbox"
+  create_no_jq_path_wrappers "$sandbox" "$os_name"
 
   PATH="${sandbox}/bin:/bin:/usr/sbin:/sbin" \
   HOME="$home" \
@@ -281,6 +287,14 @@ EOF
 
   assert_executable "${home}/.claude/bin/jq"
   assert_equals "2" "$(PATH="${sandbox}/bin:/bin:/usr/sbin:/sbin" "${home}/.claude/bin/jq" -n '1+1')"
+}
+
+test_installs_local_jq_without_homebrew() {
+  assert_installs_local_jq_for_os "Darwin" "jq-macos-amd64"
+}
+
+test_installs_local_jq_on_linux() {
+  assert_installs_local_jq_for_os "Linux" "jq-linux-amd64"
 }
 
 test_install_via_stdin_works() {
@@ -344,6 +358,67 @@ EOF
   assert_contains "$output" "2.5k"
 }
 
+# Sources statusline.sh's pure helpers (without running the renderer) and checks that
+# date/stat conversions produce identical results on macOS (BSD) and Linux (GNU).
+test_date_helpers_portable() {
+  # shellcheck disable=SC1090
+  STATUSLINE_SOURCE=1 . "$STATUSLINE_SCRIPT"
+
+  # UTC epoch is timezone-independent, so this is the same on every host.
+  assert_equals "1773828000" "$(iso_to_epoch '2026-03-18T10:00:00Z')" || return 1
+  # Fractional seconds must be tolerated and stripped.
+  assert_equals "1773828000" "$(iso_to_epoch '2026-03-18T10:00:00.123Z')" || return 1
+
+  # Formatting is local-time; pin TZ so the expected output is deterministic.
+  assert_equals "10:00" "$(TZ=UTC format_time '2026-03-18T10:00:00Z')" || return 1
+  assert_equals "Wed 18 Mar, 10:00" "$(TZ=UTC format_datetime '2026-03-18T10:00:00Z')" || return 1
+
+  # file_mtime returns a positive integer epoch for an existing file.
+  local mtime
+  mtime="$(file_mtime "$STATUSLINE_SCRIPT")"
+  case "$mtime" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+}
+
+# The renderer must fall back to the plaintext credentials file when the macOS
+# `security` keychain tool is absent (the normal case on Linux).
+test_statusline_reads_credentials_file_without_keychain() {
+  local home sandbox payload output
+  [ -n "$REAL_JQ" ] || return 99
+  home="$(new_home)"
+  sandbox="$(mktemp -d "${TEST_TMP_ROOT}/statusline-creds.XXXXXX")"
+  mkdir -p "${home}/.claude/bin"
+
+  cat > "${home}/.claude/bin/jq" <<EOF
+#!/usr/bin/env bash
+exec "${REAL_JQ}" "\$@"
+EOF
+  chmod +x "${home}/.claude/bin/jq"
+
+  # Linux stores the OAuth token here in plaintext with this exact shape.
+  cat > "${home}/.claude/.credentials.json" <<'JSON'
+{"claudeAiOauth":{"accessToken":"test-token","refreshToken":"r","expiresAt":0,"scopes":[],"subscriptionType":"pro"}}
+JSON
+
+  # Sandbox without `security`, and with curl failing so no network is hit.
+  mkdir -p "${sandbox}/bin"
+  cat > "${sandbox}/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  cat > "${sandbox}/bin/git" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  chmod +x "${sandbox}/bin/curl" "${sandbox}/bin/git"
+
+  payload='{"model":{"display_name":"Test Model"},"cwd":"/tmp","context_window":{"context_window_size":200000,"current_usage":{"input_tokens":1000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"session":{"start_time":"2026-03-18T10:00:00Z"},"cost":{"total_lines_added":1,"total_lines_removed":1}}'
+  # No `security` on PATH here — must not error, must still render line 1.
+  output="$(printf '%s' "$payload" | run_statusline_isolated env PATH="${sandbox}/bin:/usr/bin:/bin:/usr/sbin:/sbin" HOME="$home" "$STATUSLINE_SCRIPT")"
+  assert_contains "$output" "Test Model"
+}
+
 run_test() {
   local test_name="$1"
   local rc
@@ -365,9 +440,12 @@ main() {
   run_test test_install_with_yes_replaces_conflict_and_backups
   run_test test_uninstall_keeps_custom_statusline_setting
   run_test test_installs_local_jq_without_homebrew
+  run_test test_installs_local_jq_on_linux
   run_test test_install_via_stdin_works
   run_test test_statusline_uses_local_jq_fallback
   run_test test_statusline_shows_cost_for_api_billing_users
+  run_test test_date_helpers_portable
+  run_test test_statusline_reads_credentials_file_without_keychain
 
   printf "\nResult: %d passed, %d failed, %d skipped\n" "$TESTS_PASSED" "$TESTS_FAILED" "$TESTS_SKIPPED"
   [ "$TESTS_FAILED" -eq 0 ]

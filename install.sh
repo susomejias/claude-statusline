@@ -96,21 +96,49 @@ require_confirmation_or_exit() {
   esac
 }
 
-require_macos() {
-  if [[ "$(uname -s)" != "Darwin" ]]; then
-    error "This installer currently supports macOS only."
-    exit 1
+require_supported_os() {
+  case "$(uname -s)" in
+    Darwin|Linux) ;;
+    *)
+      error "This installer supports macOS and Linux only (detected: $(uname -s))."
+      exit 1
+      ;;
+  esac
+}
+
+# Prints the available SHA-256 tool: "sha256sum" (Linux) or "shasum" (macOS).
+sha256_tool() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf "sha256sum\n"
+  elif command -v shasum >/dev/null 2>&1; then
+    printf "shasum\n"
+  else
+    printf "\n"
   fi
+}
+
+# Computes the SHA-256 hex digest of a file, portable across macOS and Linux.
+sha256_of() {
+  local file="$1"
+  case "$(sha256_tool)" in
+    sha256sum) sha256sum "$file" | awk '{print $1}' ;;
+    shasum)    shasum -a 256 "$file" | awk '{print $1}' ;;
+    *)         return 1 ;;
+  esac
 }
 
 require_base_tools() {
   local cmd
-  for cmd in bash curl shasum mktemp uname chmod cp mv cmp awk; do
+  for cmd in bash curl mktemp uname chmod cp mv cmp awk; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
       error "Missing required tool: ${cmd}. Please install it and retry."
       exit 1
     fi
   done
+  if [[ -z "$(sha256_tool)" ]]; then
+    error "Missing required tool: need 'sha256sum' or 'shasum'. Please install one and retry."
+    exit 1
+  fi
 }
 
 backup_file() {
@@ -146,12 +174,23 @@ resolve_jq_in_path() {
 }
 
 detect_jq_asset_name() {
+  local os arch
+  case "$(uname -s)" in
+    Darwin) os="macos" ;;
+    Linux)  os="linux" ;;
+    *)
+      error "Unsupported OS for automatic jq install: $(uname -s)"
+      error "Install jq manually and retry."
+      exit 1
+      ;;
+  esac
+
   case "$(uname -m)" in
     arm64|aarch64)
-      printf "jq-macos-arm64\n"
+      arch="arm64"
       ;;
     x86_64|amd64)
-      printf "jq-macos-amd64\n"
+      arch="amd64"
       ;;
     *)
       error "Unsupported CPU architecture for automatic jq install: $(uname -m)"
@@ -159,6 +198,8 @@ detect_jq_asset_name() {
       exit 1
       ;;
   esac
+
+  printf "jq-%s-%s\n" "$os" "$arch"
 }
 
 expected_checksum_from_file() {
@@ -210,7 +251,7 @@ install_local_jq_binary() {
     exit 1
   fi
 
-  actual="$(shasum -a 256 "$tmp_jq" | awk '{print $1}')"
+  actual="$(sha256_of "$tmp_jq")"
   if [[ "$actual" != "$expected" ]]; then
     rm -f "$tmp_jq" "$tmp_sums"
     error "Checksum mismatch for downloaded jq binary."
@@ -346,7 +387,7 @@ install_or_update() {
   local action_label
   local source_script
 
-  require_macos
+  require_supported_os
   require_base_tools
   ensure_jq
 
@@ -392,7 +433,7 @@ uninstall_statusline() {
   local settings_valid=false
   local tmpfile
 
-  require_macos
+  require_supported_os
   require_base_tools
 
   if [[ -f "$SETTINGS_FILE" ]]; then

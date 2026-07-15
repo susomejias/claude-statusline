@@ -1,12 +1,5 @@
 #!/usr/bin/env bash
 
-input=$(cat)
-[ -z "$input" ] && printf "Claude" && exit 0
-
-JQ_BIN="$(command -v jq 2>/dev/null || true)"
-[ -z "$JQ_BIN" ] && [ -x "$HOME/.claude/bin/jq" ] && JQ_BIN="$HOME/.claude/bin/jq"
-[ -z "$JQ_BIN" ] && printf "Claude" && exit 0
-
 # Colors
 RESET='\033[0m'
 DIM='\033[2m'
@@ -20,6 +13,10 @@ WHITE='\033[38;2;220;220;220m'
 MAGENTA='\033[38;2;180;140;255m'
 
 SEP=" ${DIM}│${RESET} "
+
+# Detect coreutils flavor once: GNU (Linux) accepts --version, BSD (macOS) does not.
+if date --version >/dev/null 2>&1; then DATE_FLAVOR="gnu"; else DATE_FLAVOR="bsd"; fi
+if stat --version >/dev/null 2>&1; then STAT_FLAVOR="gnu"; else STAT_FLAVOR="bsd"; fi
 
 color_pct() {
   local p=$1
@@ -42,22 +39,56 @@ progress_bar() {
   printf "%b" "$bar"
 }
 
+# Convert an ISO-8601 UTC timestamp (e.g. 2026-03-18T10:00:00.123Z) to a Unix epoch.
 iso_to_epoch() {
   local iso="${1%%.*}"; iso="${iso%%Z}"
-  TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%S" "$iso" +%s 2>/dev/null
+  if [ "$DATE_FLAVOR" = "gnu" ]; then
+    date -u -d "${iso}Z" +%s 2>/dev/null
+  else
+    TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%S" "$iso" +%s 2>/dev/null
+  fi
+}
+
+# Format a Unix epoch in local time using the given strftime pattern.
+epoch_to_local() {
+  local epoch="$1" fmt="$2"
+  if [ "$DATE_FLAVOR" = "gnu" ]; then
+    date -d "@$epoch" +"$fmt" 2>/dev/null
+  else
+    date -j -r "$epoch" +"$fmt" 2>/dev/null
+  fi
 }
 
 format_time() {
   local epoch; epoch=$(iso_to_epoch "$1")
   [ -z "$epoch" ] && return
-  date -j -r "$epoch" +"%H:%M" 2>/dev/null
+  epoch_to_local "$epoch" "%H:%M"
 }
 
 format_datetime() {
   local epoch; epoch=$(iso_to_epoch "$1")
   [ -z "$epoch" ] && return
-  date -j -r "$epoch" +"%a %-d %b, %H:%M" 2>/dev/null
+  epoch_to_local "$epoch" "%a %-d %b, %H:%M"
 }
+
+# Modification time of a file as a Unix epoch.
+file_mtime() {
+  if [ "$STAT_FLAVOR" = "gnu" ]; then
+    stat -c %Y "$1" 2>/dev/null
+  else
+    stat -f %m "$1" 2>/dev/null
+  fi
+}
+
+# When sourced by the test suite, stop here: only the pure helpers above are needed.
+[ "${STATUSLINE_SOURCE:-0}" = "1" ] && return 0 2>/dev/null
+
+input=$(cat)
+[ -z "$input" ] && printf "Claude" && exit 0
+
+JQ_BIN="$(command -v jq 2>/dev/null || true)"
+[ -z "$JQ_BIN" ] && [ -x "$HOME/.claude/bin/jq" ] && JQ_BIN="$HOME/.claude/bin/jq"
+[ -z "$JQ_BIN" ] && printf "Claude" && exit 0
 
 # Extract native Claude Code data
 model=$(echo "$input" | "$JQ_BIN" -r '.model.display_name // "Claude"')
@@ -131,7 +162,7 @@ CACHE="/tmp/claude-statusline-cache.json"
 CACHE_TTL_SECONDS=90
 usage=""
 if [ -f "$CACHE" ]; then
-  age=$(( $(date +%s) - $(stat -f %m "$CACHE") ))
+  age=$(( $(date +%s) - $(file_mtime "$CACHE") ))
   (( age <= CACHE_TTL_SECONDS )) && usage=$(cat "$CACHE")
 fi
 if [ -z "$usage" ]; then
