@@ -14,6 +14,7 @@ A minimal statusline for [Claude Code](https://claude.ai/code) showing context, 
 **Lines 2–3**
 
 - Subscription: current 5h window and 7-day rolling window, with reset times in local time.
+- Fable models: while a Claude Fable model is active and the usage endpoint exposes a Fable-scoped limit, an extra `Fable` row shows that weekly sub-cap (the only model-specific limit; Fable bills refusals and fallback differently from the generic estimate). Disable it with `"statuslineFableUsage": false` in `~/.claude/settings.json`.
 - API billing / API key: session cost in USD plus input, cache write, cache read, and output tokens.
 
 Colors shift green → orange → yellow → red as limits are approached.
@@ -70,7 +71,7 @@ chmod +x ./tests/test.sh
 ./tests/test.sh
 ```
 
-The suite covers installer safety, `jq` fallback behavior, and the API billing cost display.
+The suite covers installer safety, `jq` fallback behavior, the API billing cost display, and the Fable usage row.
 
 ### Managed Claude setting
 
@@ -92,7 +93,7 @@ Other settings are preserved.
 
 Claude Code pipes a JSON payload to the script on each interaction. The script always reads native fields such as model, context window, session timing, line changes, cost, and tokens.
 
-If the Claude OAuth token is available — from the macOS Keychain, or from `~/.claude/.credentials.json` on Linux — it also fetches subscription usage from the Anthropic API and shows current and weekly limits. If that usage data is not available, it falls back to the native cost and token data already present in the Claude Code payload. Results from the usage endpoint are cached for 90 seconds.
+If the Claude OAuth token is available — from the macOS Keychain, or from `~/.claude/.credentials.json` on Linux — it also fetches subscription usage from the Anthropic API and shows current and weekly limits, plus the Fable-specific weekly sub-cap while a Fable model is active. If that usage data is not available, it falls back to the native cost and token data already present in the Claude Code payload. Results from the usage endpoint are cached for 90 seconds.
 
 ## Credits
 

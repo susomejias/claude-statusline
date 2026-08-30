@@ -20,28 +20,37 @@ if stat --version >/dev/null 2>&1; then STAT_FLAVOR="gnu"; else STAT_FLAVOR="bsd
 
 color_pct() {
   local p=$1
-  if   (( p >= 90 )); then printf "$RED"
-  elif (( p >= 70 )); then printf "$YELLOW"
-  elif (( p >= 50 )); then printf "$ORANGE"
-  else                     printf "$GREEN"
+  if ((p >= 90)); then
+    printf "$RED"
+  elif ((p >= 70)); then
+    printf "$YELLOW"
+  elif ((p >= 50)); then
+    printf "$ORANGE"
+  else
+    printf "$GREEN"
   fi
 }
 
 progress_bar() {
   local pct=$1 width=10
-  local remaining=$(( 100 - pct ))
-  local filled=$(( remaining * width / 100 ))
-  local color; color=$(color_pct "$pct")
+  local remaining=$((100 - pct))
+  local filled=$((remaining * width / 100))
+  local color
+  color=$(color_pct "$pct")
   local bar=""
-  for (( i=0; i<width; i++ )); do
-    (( i < filled )) && bar+="${color}●${RESET}" || bar+="${DIM}○${RESET}"
+  for ((i = 0; i < width; i++)); do
+    ((i < filled)) && bar+="${color}●${RESET}" || bar+="${DIM}○${RESET}"
   done
   printf "%b" "$bar"
 }
 
 # Convert an ISO-8601 UTC timestamp (e.g. 2026-03-18T10:00:00.123Z) to a Unix epoch.
 iso_to_epoch() {
-  local iso="${1%%.*}"; iso="${iso%%Z}"
+  # Empty input must stay empty: GNU `date -d "Z"` parses a bare "Z" as Zulu
+  # timezone with today's date, inventing a bogus epoch for missing timestamps.
+  [ -n "$1" ] || return
+  local iso="${1%%.*}"
+  iso="${iso%%Z}"
   if [ "$DATE_FLAVOR" = "gnu" ]; then
     date -u -d "${iso}Z" +%s 2>/dev/null
   else
@@ -60,13 +69,15 @@ epoch_to_local() {
 }
 
 format_time() {
-  local epoch; epoch=$(iso_to_epoch "$1")
+  local epoch
+  epoch=$(iso_to_epoch "$1")
   [ -z "$epoch" ] && return
   epoch_to_local "$epoch" "%H:%M"
 }
 
 format_datetime() {
-  local epoch; epoch=$(iso_to_epoch "$1")
+  local epoch
+  epoch=$(iso_to_epoch "$1")
   [ -z "$epoch" ] && return
   epoch_to_local "$epoch" "%a %-d %b, %H:%M"
 }
@@ -92,6 +103,7 @@ JQ_BIN="$(command -v jq 2>/dev/null || true)"
 
 # Extract native Claude Code data
 model=$(echo "$input" | "$JQ_BIN" -r '.model.display_name // "Claude"')
+model_id=$(echo "$input" | "$JQ_BIN" -r '.model.id // ""')
 cwd=$(echo "$input" | "$JQ_BIN" -r '.cwd // ""')
 size=$(echo "$input" | "$JQ_BIN" -r '.context_window.context_window_size // 200000')
 input_tokens=$(echo "$input" | "$JQ_BIN" -r '.context_window.current_usage.input_tokens // 0')
@@ -103,9 +115,9 @@ lines_removed=$(echo "$input" | "$JQ_BIN" -r '.cost.total_lines_removed // 0' 2>
 total_cost=$(echo "$input" | "$JQ_BIN" -r '.cost.total_cost_usd // empty' 2>/dev/null)
 output_tokens=$(echo "$input" | "$JQ_BIN" -r '.context_window.total_output_tokens // 0' 2>/dev/null)
 
-current_tokens=$(( input_tokens + cache_create + cache_read ))
-(( size == 0 )) && size=200000
-ctx_pct=$(( current_tokens * 100 / size ))
+current_tokens=$((input_tokens + cache_create + cache_read))
+((size == 0)) && size=200000
+ctx_pct=$((current_tokens * 100 / size))
 
 # Directory and git
 dir_name="${cwd##*/}"
@@ -123,34 +135,43 @@ duration=""
 if [ -n "$session_start" ]; then
   start=$(iso_to_epoch "$session_start")
   if [ -n "$start" ]; then
-    elapsed=$(( $(date +%s) - start ))
-    if   (( elapsed >= 3600 )); then duration="$(( elapsed / 3600 ))h$(( (elapsed % 3600) / 60 ))m"
-    elif (( elapsed >= 60   )); then duration="$(( elapsed / 60 ))m"
-    else                              duration="${elapsed}s"
+    elapsed=$(($(date +%s) - start))
+    if ((elapsed >= 3600)); then
+      duration="$((elapsed / 3600))h$(((elapsed % 3600) / 60))m"
+    elif ((elapsed >= 60)); then
+      duration="$((elapsed / 60))m"
+    else
+      duration="${elapsed}s"
     fi
   fi
 fi
 
-# Thinking mode
-thinking_on=false
 settings="$HOME/.claude/settings.json"
-[ -f "$settings" ] && [ "$("$JQ_BIN" -r '.alwaysThinkingEnabled // false' "$settings" 2>/dev/null)" = "true" ] && thinking_on=true
+
+# Fable-specific usage row (Claude Fable 5): active by default, opt-out here.
+fable_active=false
+case "$model_id" in *fable*) fable_active=true ;; esac
+fable_row_enabled=true
+# Read raw: jq's `//` treats an explicit false as empty, which would re-enable the row.
+[ -f "$settings" ] && [ "$("$JQ_BIN" -r '.statuslineFableUsage' "$settings" 2>/dev/null)" = "false" ] && fable_row_enabled=false
 
 # Line 1: Model | Context | Dir (branch) | Duration | Thinking
-ctx_remaining=$(( 100 - ctx_pct ))
+ctx_remaining=$((100 - ctx_pct))
 ctx_color=$(color_pct "$ctx_pct")
 line1="${BLUE}${model}${RESET}${SEP}"
 line1+="✍️ ${ctx_color}${ctx_remaining}%${RESET}${SEP}"
 line1+="${CYAN}${dir_name}${RESET}"
 [ -n "$git_branch" ] && line1+=" ${GREEN}(${git_branch}${RED}${git_dirty}${GREEN})${RESET}"
-[ -n "$duration" ]   && line1+="${SEP}${WHITE}${duration}${RESET}"
+[ -n "$duration" ] && line1+="${SEP}${WHITE}${duration}${RESET}"
 line1+="${SEP}${GREEN}+${lines_added}${RESET}${DIM}/${RESET}${RED}-${lines_removed}${RESET}"
 
 # Get OAuth token from macOS Keychain or credentials file
 get_token() {
-  local blob; blob=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
+  local blob
+  blob=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
   if [ -n "$blob" ]; then
-    local t; t=$(echo "$blob" | "$JQ_BIN" -r '.claudeAiOauth.accessToken // empty' 2>/dev/null)
+    local t
+    t=$(echo "$blob" | "$JQ_BIN" -r '.claudeAiOauth.accessToken // empty' 2>/dev/null)
     [ -n "$t" ] && echo "$t" && return
   fi
   local creds="$HOME/.claude/.credentials.json"
@@ -162,8 +183,8 @@ CACHE="/tmp/claude-statusline-cache.json"
 CACHE_TTL_SECONDS=90
 usage=""
 if [ -f "$CACHE" ]; then
-  age=$(( $(date +%s) - $(file_mtime "$CACHE") ))
-  (( age <= CACHE_TTL_SECONDS )) && usage=$(cat "$CACHE")
+  age=$(($(date +%s) - $(file_mtime "$CACHE")))
+  ((age <= CACHE_TTL_SECONDS)) && usage=$(cat "$CACHE")
 fi
 if [ -z "$usage" ]; then
   token=$(get_token)
@@ -174,7 +195,8 @@ if [ -z "$usage" ]; then
       -H "User-Agent: claude-code/2.1.34" \
       "https://api.anthropic.com/api/oauth/usage" 2>/dev/null)
     if echo "$resp" | "$JQ_BIN" -e '.five_hour' >/dev/null 2>&1; then
-      usage="$resp"; echo "$resp" > "$CACHE"
+      usage="$resp"
+      echo "$resp" >"$CACHE"
     fi
   fi
   [ -z "$usage" ] && [ -f "$CACHE" ] && usage=$(cat "$CACHE")
@@ -191,11 +213,29 @@ if [ -n "$usage" ]; then
   wd_reset=$(format_datetime "$(echo "$usage" | "$JQ_BIN" -r '.seven_day.resets_at // empty')")
   wd_color=$(color_pct "$wd_pct")
 
-  fh_remaining=$(( 100 - fh_pct ))
-  wd_remaining=$(( 100 - wd_pct ))
+  fh_remaining=$((100 - fh_pct))
+  wd_remaining=$((100 - wd_pct))
 
   rate_lines="${WHITE}Current${RESET} $(progress_bar "$fh_pct") ${fh_color}$(printf "%3d" "$fh_remaining")% left${RESET} ${DIM}⟳ ${RESET}${WHITE}${fh_reset}${RESET}"
   rate_lines+="\n${WHITE}Weekly${RESET}  $(progress_bar "$wd_pct") ${wd_color}$(printf "%3d" "$wd_remaining")% left${RESET} ${DIM}⟳ ${RESET}${WHITE}${wd_reset}${RESET}"
+
+  # Fable models bill refusals/fallback differently than the generic estimate;
+  # show the Fable-scoped limit when the usage endpoint exposes one. The real
+  # payload carries it as a model-scoped entry in limits[] (scope.model like
+  # "Fable"), not as a top-level key; other pools use obfuscated codename keys.
+  if $fable_active && $fable_row_enabled; then
+    fable_window=$(echo "$usage" | "$JQ_BIN" -c '[.limits[]? | select(((.scope.model.id // "") + (.scope.model.display_name // "")) | ascii_downcase | contains("fable")) | select(.percent != null)][0] // empty')
+    if [ -n "$fable_window" ]; then
+      fb_pct=$(echo "$fable_window" | "$JQ_BIN" -r '.percent' | awk '{printf "%.0f", $1}')
+      # The only Fable-specific limit is its weekly sub-cap, so render the
+      # reset with the same weekly-style datetime as the Weekly row.
+      fb_reset=$(format_datetime "$(echo "$fable_window" | "$JQ_BIN" -r '.resets_at // empty')")
+      fb_color=$(color_pct "$fb_pct")
+      fb_remaining=$((100 - fb_pct))
+      rate_lines+="\n${WHITE}Fable${RESET}   $(progress_bar "$fb_pct") ${fb_color}$(printf "%3d" "$fb_remaining")% left${RESET}"
+      [ -n "$fb_reset" ] && rate_lines+=" ${DIM}⟳ ${RESET}${WHITE}${fb_reset}${RESET}"
+    fi
+  fi
 elif [ -n "$total_cost" ]; then
   cost_fmt=$(printf "%.4f" "$total_cost")
   in_k=$(awk "BEGIN{printf \"%.1f\", $current_tokens/1000}")

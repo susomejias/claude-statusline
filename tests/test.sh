@@ -52,8 +52,8 @@ assert_contains() {
   local haystack="$1"
   local needle="$2"
   case "$haystack" in
-    *"$needle"*) return 0 ;;
-    *) return 1 ;;
+  *"$needle"*) return 0 ;;
+  *) return 1 ;;
   esac
 }
 
@@ -108,19 +108,19 @@ create_statusline_command_stubs() {
 
   mkdir -p "${dir}/bin"
 
-  cat > "${dir}/bin/git" <<'EOF'
+  cat >"${dir}/bin/git" <<'EOF'
 #!/usr/bin/env bash
 exit 1
 EOF
-  cat > "${dir}/bin/security" <<'EOF'
+  cat >"${dir}/bin/security" <<'EOF'
 #!/usr/bin/env bash
 exit 1
 EOF
-  cat > "${dir}/bin/curl" <<'EOF'
+  cat >"${dir}/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 exit 1
 EOF
-  cat > "${dir}/bin/awk" <<'EOF'
+  cat >"${dir}/bin/awk" <<'EOF'
 #!/usr/bin/env bash
 exec /usr/bin/awk "$@"
 EOF
@@ -154,7 +154,7 @@ test_install_conflict_requires_yes() {
   log="${TEST_TMP_ROOT}/install-conflict.log"
 
   mkdir -p "${home}/.claude"
-  cat > "$settings" <<'JSON'
+  cat >"$settings" <<'JSON'
 {
   "statusLine": {
     "type": "command",
@@ -177,7 +177,7 @@ test_install_with_yes_replaces_conflict_and_backups() {
   settings="${home}/.claude/settings.json"
 
   mkdir -p "${home}/.claude"
-  cat > "$settings" <<'JSON'
+  cat >"$settings" <<'JSON'
 {
   "theme": "dark",
   "statusLine": {
@@ -205,7 +205,7 @@ test_uninstall_keeps_custom_statusline_setting() {
   cp "$STATUSLINE_SCRIPT" "${home}/.claude/statusline.sh"
   chmod +x "${home}/.claude/statusline.sh"
 
-  cat > "$settings" <<'JSON'
+  cat >"$settings" <<'JSON'
 {
   "statusLine": {
     "type": "command",
@@ -233,7 +233,7 @@ create_no_jq_path_wrappers() {
 
   mkdir -p "${dir}/bin"
 
-  cat > "${dir}/bin/uname" <<EOF
+  cat >"${dir}/bin/uname" <<EOF
 #!/usr/bin/env bash
 if [[ "\${1:-}" == "-s" ]]; then
   echo ${os_name}
@@ -249,7 +249,7 @@ EOF
 
   for cmd in curl shasum sha256sum mktemp dirname awk cmp; do
     command -v "$cmd" >/dev/null 2>&1 || continue
-    cat > "${dir}/bin/${cmd}" <<EOF
+    cat >"${dir}/bin/${cmd}" <<EOF
 #!/usr/bin/env bash
 exec "$(command -v "$cmd")" "\$@"
 EOF
@@ -269,21 +269,21 @@ assert_installs_local_jq_for_os() {
   checksums="${sandbox}/sha256sum.txt"
   mkdir -p "$release"
 
-  cat > "${release}/${asset}" <<EOF
+  cat >"${release}/${asset}" <<EOF
 #!/usr/bin/env bash
 exec "${REAL_JQ}" "\$@"
 EOF
   chmod +x "${release}/${asset}"
   hash="$(shasum -a 256 "${release}/${asset}" | awk '{print $1}')"
-  printf "%s %s\n" "$hash" "$asset" > "$checksums"
+  printf "%s %s\n" "$hash" "$asset" >"$checksums"
 
   create_no_jq_path_wrappers "$sandbox" "$os_name"
 
   PATH="${sandbox}/bin:/bin:/usr/sbin:/sbin" \
-  HOME="$home" \
-  CLAUDE_STATUSLINE_JQ_RELEASE_BASE="file://${release}" \
-  CLAUDE_STATUSLINE_JQ_CHECKSUMS_URL="file://${checksums}" \
-  "$INSTALL_SCRIPT" install >/dev/null 2>&1
+    HOME="$home" \
+    CLAUDE_STATUSLINE_JQ_RELEASE_BASE="file://${release}" \
+    CLAUDE_STATUSLINE_JQ_CHECKSUMS_URL="file://${checksums}" \
+    "$INSTALL_SCRIPT" install >/dev/null 2>&1
 
   assert_executable "${home}/.claude/bin/jq"
   assert_equals "2" "$(PATH="${sandbox}/bin:/bin:/usr/sbin:/sbin" "${home}/.claude/bin/jq" -n '1+1')"
@@ -302,10 +302,10 @@ test_install_via_stdin_works() {
   home="$(new_home)"
   log="${TEST_TMP_ROOT}/install-stdin.log"
 
-  cat "$INSTALL_SCRIPT" | \
+  cat "$INSTALL_SCRIPT" |
     HOME="$home" \
-    CLAUDE_STATUSLINE_SCRIPT_URL="file://${STATUSLINE_SCRIPT}" \
-    bash -s -- install >"$log" 2>&1
+      CLAUDE_STATUSLINE_SCRIPT_URL="file://${STATUSLINE_SCRIPT}" \
+      bash -s -- install >"$log" 2>&1
 
   assert_executable "${home}/.claude/statusline.sh"
   assert_file_exists "${home}/.claude/settings.json"
@@ -319,7 +319,7 @@ test_statusline_uses_local_jq_fallback() {
   sandbox="$(mktemp -d "${TEST_TMP_ROOT}/statusline-sandbox.XXXXXX")"
   mkdir -p "${home}/.claude/bin"
 
-  cat > "${home}/.claude/bin/jq" <<EOF
+  cat >"${home}/.claude/bin/jq" <<EOF
 #!/usr/bin/env bash
 exec "${REAL_JQ}" "\$@"
 EOF
@@ -339,7 +339,7 @@ test_statusline_shows_cost_for_api_billing_users() {
   sandbox="$(mktemp -d "${TEST_TMP_ROOT}/statusline-api-billing.XXXXXX")"
   mkdir -p "${home}/.claude/bin"
 
-  cat > "${home}/.claude/bin/jq" <<EOF
+  cat >"${home}/.claude/bin/jq" <<EOF
 #!/usr/bin/env bash
 exec "${REAL_JQ}" "\$@"
 EOF
@@ -368,6 +368,10 @@ test_date_helpers_portable() {
   assert_equals "1773828000" "$(iso_to_epoch '2026-03-18T10:00:00Z')" || return 1
   # Fractional seconds must be tolerated and stripped.
   assert_equals "1773828000" "$(iso_to_epoch '2026-03-18T10:00:00.123Z')" || return 1
+  # Empty input must yield nothing: GNU `date -d "Z"` would invent today's date.
+  assert_equals "" "$(iso_to_epoch '')" || return 1
+  assert_equals "" "$(format_time '')" || return 1
+  assert_equals "" "$(format_datetime '')" || return 1
 
   # Formatting is local-time; pin TZ so the expected output is deterministic.
   assert_equals "10:00" "$(TZ=UTC format_time '2026-03-18T10:00:00Z')" || return 1
@@ -377,7 +381,7 @@ test_date_helpers_portable() {
   local mtime
   mtime="$(file_mtime "$STATUSLINE_SCRIPT")"
   case "$mtime" in
-    ''|*[!0-9]*) return 1 ;;
+  '' | *[!0-9]*) return 1 ;;
   esac
 }
 
@@ -390,24 +394,24 @@ test_statusline_reads_credentials_file_without_keychain() {
   sandbox="$(mktemp -d "${TEST_TMP_ROOT}/statusline-creds.XXXXXX")"
   mkdir -p "${home}/.claude/bin"
 
-  cat > "${home}/.claude/bin/jq" <<EOF
+  cat >"${home}/.claude/bin/jq" <<EOF
 #!/usr/bin/env bash
 exec "${REAL_JQ}" "\$@"
 EOF
   chmod +x "${home}/.claude/bin/jq"
 
   # Linux stores the OAuth token here in plaintext with this exact shape.
-  cat > "${home}/.claude/.credentials.json" <<'JSON'
+  cat >"${home}/.claude/.credentials.json" <<'JSON'
 {"claudeAiOauth":{"accessToken":"test-token","refreshToken":"r","expiresAt":0,"scopes":[],"subscriptionType":"pro"}}
 JSON
 
   # Sandbox without `security`, and with curl failing so no network is hit.
   mkdir -p "${sandbox}/bin"
-  cat > "${sandbox}/bin/curl" <<'EOF'
+  cat >"${sandbox}/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 exit 1
 EOF
-  cat > "${sandbox}/bin/git" <<'EOF'
+  cat >"${sandbox}/bin/git" <<'EOF'
 #!/usr/bin/env bash
 exit 1
 EOF
@@ -419,17 +423,116 @@ EOF
   assert_contains "$output" "Test Model"
 }
 
+# Prepares a home whose statusline can complete an OAuth usage fetch: a plaintext
+# credentials file for the token and a curl stub that serves the given usage JSON.
+setup_fable_sandbox() {
+  local home="$1" sandbox="$2" usage_json="$3"
+
+  mkdir -p "${home}/.claude/bin"
+  cat >"${home}/.claude/bin/jq" <<EOF
+#!/usr/bin/env bash
+exec "${REAL_JQ}" "\$@"
+EOF
+  chmod +x "${home}/.claude/bin/jq"
+
+  cat >"${home}/.claude/.credentials.json" <<'JSON'
+{"claudeAiOauth":{"accessToken":"test-token","refreshToken":"r","expiresAt":0,"scopes":[],"subscriptionType":"pro"}}
+JSON
+
+  mkdir -p "${sandbox}/bin"
+  cat >"${sandbox}/bin/curl" <<EOF
+#!/usr/bin/env bash
+printf '%s' '${usage_json}'
+EOF
+  cat >"${sandbox}/bin/git" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+  chmod +x "${sandbox}/bin/curl" "${sandbox}/bin/git"
+}
+
+# While a Fable model is active, the usage endpoint's Fable-specific pool (key
+# shape not publicly documented — matched tolerantly by name) must render as a
+# third rate-limit row in the Current/Weekly style.
+test_statusline_shows_fable_row_when_fable_model_active() {
+  local home sandbox payload output
+  [ -n "$REAL_JQ" ] || return 99
+  home="$(new_home)"
+  sandbox="$(mktemp -d "${TEST_TMP_ROOT}/statusline-fable.XXXXXX")"
+
+  setup_fable_sandbox "$home" "$sandbox" \
+    '{"five_hour":{"utilization":40,"resets_at":"2026-03-18T14:00:00Z"},"seven_day":{"utilization":20,"resets_at":"2026-03-20T14:00:00Z"},"limits":[{"kind":"session","group":"session","percent":0,"severity":"normal","resets_at":"2026-03-18T14:00:00Z","scope":null,"is_active":true},{"kind":"weekly_scoped","group":"weekly","percent":90,"severity":"normal","resets_at":null,"scope":{"model":{"id":null,"display_name":"Opus"},"surface":null},"is_active":false},{"kind":"weekly_scoped","group":"weekly","percent":70,"severity":"normal","resets_at":"2026-03-18T15:00:00Z","scope":{"model":{"id":null,"display_name":"Fable"},"surface":null},"is_active":false}]}'
+
+  payload='{"model":{"id":"claude-fable-5","display_name":"Test Model"},"cwd":"/tmp","context_window":{"context_window_size":200000,"current_usage":{"input_tokens":1000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"session":{"start_time":"2026-03-18T10:00:00Z"},"cost":{"total_lines_added":1,"total_lines_removed":1}}'
+  output="$(printf '%s' "$payload" | run_statusline_isolated env PATH="${sandbox}/bin:/bin:/usr/sbin:/sbin" TZ=UTC HOME="$home" "$STATUSLINE_SCRIPT")"
+
+  assert_contains "$output" "Fable"
+  assert_contains "$output" "30% left"
+  # The reset must render weekly-style (full datetime), not 5h-style HH:MM.
+  assert_contains "$output" "18 Mar"
+}
+
+# The Fable row is opt-out via ~/.claude/settings.json and must never render for
+# other models, even when the usage payload carries a Fable pool.
+test_statusline_fable_row_toggle_and_model_guard() {
+  local home sandbox payload output
+  [ -n "$REAL_JQ" ] || return 99
+  home="$(new_home)"
+  sandbox="$(mktemp -d "${TEST_TMP_ROOT}/statusline-fable-toggle.XXXXXX")"
+
+  setup_fable_sandbox "$home" "$sandbox" \
+    '{"five_hour":{"utilization":40,"resets_at":"2026-03-18T14:00:00Z"},"seven_day":{"utilization":20,"resets_at":"2026-03-20T14:00:00Z"},"limits":[{"kind":"session","group":"session","percent":0,"severity":"normal","resets_at":"2026-03-18T14:00:00Z","scope":null,"is_active":true},{"kind":"weekly_scoped","group":"weekly","percent":90,"severity":"normal","resets_at":null,"scope":{"model":{"id":null,"display_name":"Opus"},"surface":null},"is_active":false},{"kind":"weekly_scoped","group":"weekly","percent":70,"severity":"normal","resets_at":"2026-03-18T15:00:00Z","scope":{"model":{"id":null,"display_name":"Fable"},"surface":null},"is_active":false}]}'
+
+  # Non-Fable model: no Fable row even though the pool is present.
+  payload='{"model":{"id":"claude-sonnet-4-5","display_name":"Test Model"},"cwd":"/tmp","context_window":{"context_window_size":200000,"current_usage":{"input_tokens":1000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"session":{"start_time":"2026-03-18T10:00:00Z"},"cost":{"total_lines_added":1,"total_lines_removed":1}}'
+  output="$(printf '%s' "$payload" | run_statusline_isolated env PATH="${sandbox}/bin:/bin:/usr/sbin:/sbin" HOME="$home" "$STATUSLINE_SCRIPT")"
+  case "$output" in
+  *"Fable"*) return 1 ;;
+  esac
+
+  # Fable model with the toggle disabled: no Fable row.
+  printf '%s' '{"statuslineFableUsage": false}' >"${home}/.claude/settings.json"
+  payload='{"model":{"id":"claude-fable-5","display_name":"Test Model"},"cwd":"/tmp","context_window":{"context_window_size":200000,"current_usage":{"input_tokens":1000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"session":{"start_time":"2026-03-18T10:00:00Z"},"cost":{"total_lines_added":1,"total_lines_removed":1}}'
+  output="$(printf '%s' "$payload" | run_statusline_isolated env PATH="${sandbox}/bin:/bin:/usr/sbin:/sbin" HOME="$home" "$STATUSLINE_SCRIPT")"
+  case "$output" in
+  *"Fable"*) return 1 ;;
+  esac
+}
+
+# An unused Fable limit carries resets_at null; the row must render without a
+# reset time (the dashboard shows "You haven't used Fable yet"), and only the
+# Current/Weekly rows may carry the ⟳ marker.
+test_statusline_fable_row_hides_null_reset() {
+  local home sandbox payload output resets
+  [ -n "$REAL_JQ" ] || return 99
+  home="$(new_home)"
+  sandbox="$(mktemp -d "${TEST_TMP_ROOT}/statusline-fable-null-reset.XXXXXX")"
+
+  setup_fable_sandbox "$home" "$sandbox" \
+    '{"five_hour":{"utilization":40,"resets_at":"2026-03-18T14:00:00Z"},"seven_day":{"utilization":20,"resets_at":"2026-03-20T14:00:00Z"},"limits":[{"kind":"weekly_scoped","group":"weekly","percent":70,"severity":"normal","resets_at":null,"scope":{"model":{"id":null,"display_name":"Fable"},"surface":null},"is_active":false}]}'
+
+  payload='{"model":{"id":"claude-fable-5","display_name":"Test Model"},"cwd":"/tmp","context_window":{"context_window_size":200000,"current_usage":{"input_tokens":1000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"session":{"start_time":"2026-03-18T10:00:00Z"},"cost":{"total_lines_added":1,"total_lines_removed":1}}'
+  output="$(printf '%s' "$payload" | run_statusline_isolated env PATH="${sandbox}/bin:/bin:/usr/sbin:/sbin" HOME="$home" "$STATUSLINE_SCRIPT")"
+
+  assert_contains "$output" "Fable"
+  resets="$(printf '%s' "$output" | grep -o '⟳' | wc -l | tr -d ' ')"
+  assert_equals "2" "$resets"
+}
+
 run_test() {
   local test_name="$1"
   local rc
 
-  (set -euo pipefail; "$test_name")
+  (
+    set -euo pipefail
+    "$test_name"
+  )
   rc=$?
 
   case "$rc" in
-    0) pass "$test_name" ;;
-    99) skip "$test_name" ;;
-    *) fail "$test_name" ;;
+  0) pass "$test_name" ;;
+  99) skip "$test_name" ;;
+  *) fail "$test_name" ;;
   esac
 }
 
@@ -446,6 +549,9 @@ main() {
   run_test test_statusline_shows_cost_for_api_billing_users
   run_test test_date_helpers_portable
   run_test test_statusline_reads_credentials_file_without_keychain
+  run_test test_statusline_shows_fable_row_when_fable_model_active
+  run_test test_statusline_fable_row_toggle_and_model_guard
+  run_test test_statusline_fable_row_hides_null_reset
 
   printf "\nResult: %d passed, %d failed, %d skipped\n" "$TESTS_PASSED" "$TESTS_FAILED" "$TESTS_SKIPPED"
   [ "$TESTS_FAILED" -eq 0 ]
