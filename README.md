@@ -14,7 +14,7 @@ A minimal statusline for [Claude Code](https://claude.ai/code) showing context, 
 **Lines 2–3**
 
 - Subscription: current 5h window and 7-day rolling window, with reset times in local time.
-- Fable models: while a Claude Fable model is active and the usage endpoint exposes a Fable-scoped limit, an extra `Fable` row shows that weekly sub-cap (the only model-specific limit; Fable bills refusals and fallback differently from the generic estimate). Disable it with `"statuslineFableUsage": false` in `~/.claude/settings.json`.
+- Fable models: while a Claude Fable model is active and the usage endpoint exposes a Fable-scoped limit, an extra `Fable` row shows that weekly sub-cap (the only model-specific limit; Fable bills refusals and fallback differently from the generic estimate). Enabled by default — the installer writes `"statuslineFableUsage": true` into `~/.claude/settings.json`; set it to `false` to hide the row.
 - API billing / API key: session cost in USD plus input, cache write, cache read, and output tokens.
 
 Colors shift green → orange → yellow → red as limits are approached.
@@ -83,11 +83,12 @@ The installer manages this block in `~/.claude/settings.json`:
     "type": "command",
     "command": "~/.claude/statusline.sh",
     "padding": 2
-  }
+  },
+  "statuslineFableUsage": true
 }
 ```
 
-Other settings are preserved.
+`statuslineFableUsage` is set to `true` only when absent — an explicit `false` is treated as user intent and preserved across installs and updates. `uninstall` removes both managed keys. Other settings are preserved.
 
 ## How it works
 

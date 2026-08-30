@@ -145,6 +145,7 @@ test_install_creates_files() {
   assert_equals "~/.claude/statusline.sh" "$("$jq_bin" -r '.statusLine.command' "$settings")"
   assert_equals "command" "$("$jq_bin" -r '.statusLine.type' "$settings")"
   assert_equals "2" "$("$jq_bin" -r '.statusLine.padding' "$settings")"
+  assert_equals "true" "$("$jq_bin" -r '.statuslineFableUsage' "$settings")"
 }
 
 test_install_conflict_requires_yes() {
@@ -358,6 +359,33 @@ EOF
   assert_contains "$output" "2.5k"
 }
 
+# An explicit "statuslineFableUsage": false is user intent and must survive
+# reinstall; uninstall cleans the managed key up.
+test_install_preserves_explicit_fable_toggle() {
+  local home settings jq_bin
+  home="$(new_home)"
+  settings="${home}/.claude/settings.json"
+
+  mkdir -p "${home}/.claude"
+  cat >"$settings" <<'JSON'
+{
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh",
+    "padding": 2
+  },
+  "statuslineFableUsage": false
+}
+JSON
+
+  HOME="$home" "$INSTALL_SCRIPT" install >/dev/null 2>&1
+  jq_bin="$(jq_for_home "$home")"
+  assert_equals "false" "$("$jq_bin" -r '.statuslineFableUsage' "$settings")"
+
+  HOME="$home" "$INSTALL_SCRIPT" uninstall >/dev/null 2>&1
+  assert_equals "null" "$("$jq_bin" -r '.statuslineFableUsage' "$settings")"
+}
+
 # Sources statusline.sh's pure helpers (without running the renderer) and checks that
 # date/stat conversions produce identical results on macOS (BSD) and Linux (GNU).
 test_date_helpers_portable() {
@@ -542,6 +570,7 @@ main() {
   run_test test_install_conflict_requires_yes
   run_test test_install_with_yes_replaces_conflict_and_backups
   run_test test_uninstall_keeps_custom_statusline_setting
+  run_test test_install_preserves_explicit_fable_toggle
   run_test test_installs_local_jq_without_homebrew
   run_test test_installs_local_jq_on_linux
   run_test test_install_via_stdin_works

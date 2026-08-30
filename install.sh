@@ -364,6 +364,7 @@ write_settings_with_statusline() {
         end
       )
       | if (.statusLine.padding == null) then .statusLine.padding = 2 else . end
+      | if (has("statuslineFableUsage") | not) then .statuslineFableUsage = true else . end
       ' "$SETTINGS_FILE" > "$tmpfile"
 
     if cmp -s "$tmpfile" "$SETTINGS_FILE"; then
@@ -375,7 +376,7 @@ write_settings_with_statusline() {
     backup_file "$SETTINGS_FILE"
   else
     "$JQ_BIN" -n --arg command "$STATUSLINE_COMMAND" \
-      '{statusLine: {type: "command", command: $command, padding: 2}}' > "$tmpfile"
+      '{statusLine: {type: "command", command: $command, padding: 2}, statuslineFableUsage: true}' > "$tmpfile"
   fi
 
   mv "$tmpfile" "$SETTINGS_FILE"
@@ -472,7 +473,7 @@ uninstall_statusline() {
   fi
 
   tmpfile="$(mktemp "${TMPDIR:-/tmp}/${APP_NAME}.settings.XXXXXX")"
-  "$JQ_BIN" 'del(.statusLine)' "$SETTINGS_FILE" > "$tmpfile"
+  "$JQ_BIN" 'del(.statusLine, .statuslineFableUsage)' "$SETTINGS_FILE" > "$tmpfile"
 
   if cmp -s "$tmpfile" "$SETTINGS_FILE"; then
     rm -f "$tmpfile"
