@@ -476,7 +476,12 @@ EOF
 #!/usr/bin/env bash
 exit 1
 EOF
-  chmod +x "${sandbox}/bin/curl" "${sandbox}/bin/git"
+  # macOS keeps awk in /usr/bin, outside the restricted sandbox PATH.
+  cat >"${sandbox}/bin/awk" <<'EOF'
+#!/usr/bin/env bash
+exec /usr/bin/awk "$@"
+EOF
+  chmod +x "${sandbox}/bin/curl" "${sandbox}/bin/git" "${sandbox}/bin/awk"
 }
 
 # While a Fable model is active, the usage endpoint's Fable-specific pool (key
