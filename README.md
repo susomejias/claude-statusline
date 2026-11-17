@@ -26,7 +26,7 @@ Colors shift green → orange → yellow → red as limits are approached.
 - [`jq`](https://jqlang.github.io/jq/) (optional if already installed globally)
 - Claude Code with an active session
 
-Rate limits require the Claude OAuth token. It is read from the macOS Keychain when available, otherwise from `~/.claude/.credentials.json` (the location Claude Code uses on Linux). API billing output works from the native Claude Code session payload.
+Rate limits require the Claude OAuth token. It is read from the macOS Keychain when available, otherwise from `~/.claude/.credentials.json` (the location Claude Code uses on Linux). If `CLAUDE_CONFIG_DIR` is set (e.g. one config dir per account), the token comes from that dir's own Keychain entry or `$CLAUDE_CONFIG_DIR/.credentials.json`, and usage is cached per config dir. API billing output works from the native Claude Code session payload.
 
 ## Installation
 

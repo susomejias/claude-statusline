@@ -146,7 +146,31 @@ if [ -n "$session_start" ]; then
   fi
 fi
 
-settings="$HOME/.claude/settings.json"
+# Claude Code honours CLAUDE_CONFIG_DIR (used to run several accounts side by side).
+# Without it, everything below keeps the default paths and Keychain entry.
+CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+
+# Short stable id for the config dir: first 8 hex chars of its sha256. Claude Code
+# uses the same suffix for the Keychain entry of a non-default config dir.
+config_dir_hash() {
+  local sum
+  if command -v shasum >/dev/null 2>&1; then
+    sum=$(printf '%s' "$CLAUDE_CONFIG_DIR" | shasum -a 256)
+  else
+    sum=$(printf '%s' "$CLAUDE_CONFIG_DIR" | sha256sum)
+  fi
+  printf '%s' "${sum:0:8}"
+}
+KEYCHAIN_SERVICE="Claude Code-credentials"
+CACHE="/tmp/claude-statusline-cache.json"
+if [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then
+  dir_hash=$(config_dir_hash)
+  KEYCHAIN_SERVICE="Claude Code-credentials-${dir_hash}"
+  # One cache per account, so profiles don't show each other's usage.
+  CACHE="/tmp/claude-statusline-cache-${dir_hash}.json"
+fi
+
+settings="$CONFIG_DIR/settings.json"
 
 # Fable-specific usage row (Claude Fable 5): active by default, opt-out here.
 fable_active=false
@@ -168,18 +192,17 @@ line1+="${SEP}${GREEN}+${lines_added}${RESET}${DIM}/${RESET}${RED}-${lines_remov
 # Get OAuth token from macOS Keychain or credentials file
 get_token() {
   local blob
-  blob=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
+  blob=$(security find-generic-password -s "$KEYCHAIN_SERVICE" -w 2>/dev/null)
   if [ -n "$blob" ]; then
     local t
     t=$(echo "$blob" | "$JQ_BIN" -r '.claudeAiOauth.accessToken // empty' 2>/dev/null)
     [ -n "$t" ] && echo "$t" && return
   fi
-  local creds="$HOME/.claude/.credentials.json"
+  local creds="$CONFIG_DIR/.credentials.json"
   [ -f "$creds" ] && "$JQ_BIN" -r '.claudeAiOauth.accessToken // empty' "$creds" 2>/dev/null
 }
 
 # Fetch usage with 90s cache (1m30s)
-CACHE="/tmp/claude-statusline-cache.json"
 CACHE_TTL_SECONDS=90
 usage=""
 if [ -f "$CACHE" ]; then

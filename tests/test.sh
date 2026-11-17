@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -u
 
+# Tests build their own ~/.claude; an inherited per-account config dir would
+# point the statusline elsewhere. Tests that need it set it explicitly.
+unset CLAUDE_CONFIG_DIR
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALL_SCRIPT="${ROOT_DIR}/install.sh"
 STATUSLINE_SCRIPT="${ROOT_DIR}/statusline.sh"
@@ -552,6 +556,38 @@ test_statusline_fable_row_hides_null_reset() {
   assert_equals "2" "$resets"
 }
 
+# With CLAUDE_CONFIG_DIR set (one dir per account), Claude Code stores the OAuth
+# token under "Claude Code-credentials-<first 8 hex of sha256(dir)>" in the
+# Keychain. The statusline must read that entry and show the rate-limit rows.
+test_statusline_reads_keychain_entry_for_claude_config_dir() {
+  local home sandbox config_dir dir_hash payload output
+  [ -n "$REAL_JQ" ] || return 99
+  home="$(new_home)"
+  sandbox="$(mktemp -d "${TEST_TMP_ROOT}/statusline-configdir.XXXXXX")"
+  config_dir="$(mktemp -d "${TEST_TMP_ROOT}/config-dir.XXXXXX")"
+  if command -v shasum >/dev/null 2>&1; then
+    dir_hash="$(printf '%s' "$config_dir" | shasum -a 256 | cut -c1-8)"
+  else
+    dir_hash="$(printf '%s' "$config_dir" | sha256sum | cut -c1-8)"
+  fi
+
+  setup_fable_sandbox "$home" "$sandbox" '{"five_hour":{"utilization":14,"resets_at":null},"seven_day":{"utilization":67,"resets_at":null}}'
+  # Token only in the per-config-dir Keychain entry, not in a credentials file.
+  rm -f "${home}/.claude/.credentials.json"
+  cat >"${sandbox}/bin/security" <<EOF
+#!/usr/bin/env bash
+[ "\$3" = "Claude Code-credentials-${dir_hash}" ] || exit 44
+printf '%s' '{"claudeAiOauth":{"accessToken":"test-token"}}'
+EOF
+  chmod +x "${sandbox}/bin/security"
+
+  payload='{"model":{"display_name":"Test Model"},"cwd":"/tmp","context_window":{"context_window_size":200000,"current_usage":{"input_tokens":1000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}},"cost":{"total_cost_usd":0}}'
+  output="$(printf '%s' "$payload" | run_statusline_isolated env PATH="${sandbox}/bin:/usr/bin:/bin:/usr/sbin:/sbin" HOME="$home" CLAUDE_CONFIG_DIR="$config_dir" "$STATUSLINE_SCRIPT")"
+  rm -f "/tmp/claude-statusline-cache-${dir_hash}.json"
+  assert_contains "$output" "86% left"
+  assert_contains "$output" "33% left"
+}
+
 run_test() {
   local test_name="$1"
   local rc
@@ -586,6 +622,7 @@ main() {
   run_test test_statusline_shows_fable_row_when_fable_model_active
   run_test test_statusline_fable_row_toggle_and_model_guard
   run_test test_statusline_fable_row_hides_null_reset
+  run_test test_statusline_reads_keychain_entry_for_claude_config_dir
 
   printf "\nResult: %d passed, %d failed, %d skipped\n" "$TESTS_PASSED" "$TESTS_FAILED" "$TESTS_SKIPPED"
   [ "$TESTS_FAILED" -eq 0 ]
